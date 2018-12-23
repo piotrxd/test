@@ -1,64 +1,62 @@
-'use strict';
+var express = require('express');
+var app = express();
+var bodyParser = require('body-parser');
+var request = require('request');
 
-// Imports dependencies and set up http server
-const
-    express = require('express'),
-    bodyParser = require('body-parser'),
-    app = express().use(bodyParser.json()); // creates express http server
+app.use(bodyParser.json());
 
-// Sets server port and logs message on success
-app.listen(process.env.PORT || 5000, () => console.log('webhook is listening'));
+app.set('port', (process.env.PORT || 5000));
+app.set('verify_token', (process.env.VERIFY_TOKEN || 'vbngfdsafghjgfdsadfbnhjdfs'));
+app.set('page_access_token', (process.env.PAGE_ACCESS_TOKEN || 'EAANCK6BfAIkBADKW1ZAbfMEIPMOpZCPzMM5oAWFGRMdYTj8KGPTCw0v3WY5e0b6HLxNJozlI01251Xo63YFFk7FtWXVZChKvL9Bmjy7GzEqkic0duZAlSWZAGEcHrZBDTV67xBYlQhoyJcDkI7q5MKZAr4KbYzPJI73IH27YbZB3s6NZCLzlf0ful'));
 
-// Creates the endpoint for our webhook
-app.post('/webhook', (req, res) => {
-
-    let body = req.body;
-
-    // Checks this is an event from a page subscription
-    if (body.object === 'page') {
-
-        // Iterates over each entry - there may be multiple if batched
-        body.entry.forEach(function(entry) {
-
-            // Gets the message. entry.messaging is an array, but
-            // will only ever contain one message, so we get index 0
-            let webhook_event = entry.messaging[0];
-            console.log(webhook_event);
-        });
-
-        // Returns a '200 OK' response to all requests
-        res.status(200).send('EVENT_RECEIVED');
-    } else {
-        // Returns a '404 Not Found' if event is not from a page subscription
-        res.sendStatus(404);
-    }
-
+app.get('/', function (req, res) {
+        res.send('It Works! Follow FB Instructions to activate.');
 });
 
-// Adds support for GET requests to our webhook
-app.get('/webhook', (req, res) => {
+app.get('/webhook', function (req, res) {
+    if (req.query['hub.verify_token'] === app.get('verify_token')) {
+        res.send(req.query['hub.challenge']);
+    } else {
+        res.send('Error, wrong validation token');
+    }
+});
 
-    // Your verify token. Should be a random string.
-    let VERIFY_TOKEN = "vbngfdsafghjgfdsadfbnhjdfs";
-
-    // Parse the query params
-    let mode = req.query['hub.mode'];
-    let token = req.query['hub.verify_token'];
-    let challenge = req.query['hub.challenge'];
-
-    // Checks if a token and mode is in the query string of the request
-    if (mode && token) {
-
-        // Checks the mode and token sent is correct
-        if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-
-            // Responds with the challenge token from the request
-            console.log('WEBHOOK_VERIFIED');
-            res.status(200).send(challenge);
-
-        } else {
-            // Responds with '403 Forbidden' if verify tokens do not match
-            res.sendStatus(403);
+app.post('/webhook/', function (req, res) {
+    console.log (req.body);
+    messaging_events = req.body.entry[0].messaging;
+    for (i = 0; i < messaging_events.length; i++) {
+        event = req.body.entry[0].messaging[i];
+        sender = event.sender.id;
+        if (event.message && event.message.text) {
+            text = event.message.text;
+            // Your Logic Replaces the following Line
+            sendTextMessage(sender, "Text received, echo: "+ text.substring(0, 200));
         }
     }
+    res.sendStatus(200);
+});
+
+function sendTextMessage(sender, text) {
+    messageData = {
+        text:text
+    }
+    request({
+        url: 'https://graph.facebook.com/v2.6/me/messages',
+        qs: {access_token:app.get('page_access_token')},
+        method: 'POST',
+        json: {
+            recipient: {id:sender},
+            message: messageData,
+        }
+    }, function(error, response, body) {
+        if (error) {
+            console.log('Error sending message: ', error);
+        } else if (response.body.error) {
+            console.log('Error: ', response.body.error);
+        }
+    });
+}
+
+app.listen(app.get('port'), function() {
+    console.log('Node app is running on port', app.get('port'));
 });
